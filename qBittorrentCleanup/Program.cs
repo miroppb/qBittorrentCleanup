@@ -1,16 +1,17 @@
 ﻿using miroppb;
 using Newtonsoft.Json;
 using qBittorrentCleanup;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 
 Dictionary<string, string> _args= new Dictionary<string, string>();
-bool dry_run = true;
-int days = 100;
+bool DryRun = true;
+int Days = 100;
 StringBuilder text= new StringBuilder();
 long sizeDeleted = 0;
-bool rarFiles = true;
-bool torrentsOnly = false;
+bool RarFiles = true;
+bool OnlyTorrents = false;
 
 int i = 0;
 while (i < args.Length)
@@ -33,52 +34,44 @@ foreach (KeyValuePair<string, string> arg in _args)
     switch (arg.Key)
     {
         case "--not-dry-run":
-            dry_run = false;
+            DryRun = false;
+            Console.WriteLine("**ACTUALLY DELETING FILES**");
             break;
         case "-days":
-            days = int.Parse(arg.Value);
+            Days = int.Parse(arg.Value);
             break;
         case "--not-only-rar":
-            rarFiles = false;
+            RarFiles = false;
+            Console.WriteLine("Using all torrents, not just ones with .rar files");
             break;
-        case "--torrents-only":
-            torrentsOnly = true;
+        case "--only-torrents":
+            OnlyTorrents = true;
+            Console.WriteLine("Deleting only torrent files, not contents");
             break;
         case "--help":
             Console.WriteLine("USAGE:\n\n  --not-dry-run: Go ahead and delete stuff\n          -days: How many days back to check (Default: 100)" +
                 "\n --not-only-rar: Delete all torrents that fit the day-limit (Default: Deletes torrents with *.rar files)" +
-                "\n--torrents-only: Delete only torrents, and not files (Default: false)\n         --help: This text :)\n");
+                "\n--v: Delete only torrents, and not files (Default: false)\n         --help: This text :)\n");
             Environment.Exit(0);
             break;
-        case null:
-            Console.WriteLine("Unknown argument used");
+        default:
+            Console.WriteLine("Unknown argument used\n");
+            Console.WriteLine("USAGE:\n\n  --not-dry-run: Go ahead and delete stuff\n          -days: How many days back to check (Default: 100)" +
+                "\n --not-only-rar: Delete all torrents that fit the day-limit (Default: Deletes torrents with *.rar files)" +
+                "\n--only-torrents: Delete only torrents, and not files (Default: false)\n         --help: This text :)\n");
+            Environment.Exit(0);
             break;
     }
 }
 
-API api = new(Secrets.APIUrl, Secrets.APIUsername, Secrets.APIPassword);
+API api = new(Secrets.Hostname, Secrets.APIUsername, Secrets.APIPassword);
 
 //actual stuff
-Process GetProcess(string param)
-{
-    Process p = new Process();
-    p.StartInfo = new ProcessStartInfo()
-    {
-        FileName = "qbt",
-        Arguments = $"{param}",
-        WindowStyle = ProcessWindowStyle.Hidden,
-        RedirectStandardOutput = true,
-        UseShellExecute = false,
-        WorkingDirectory = Directory.GetCurrentDirectory(),
-    };
-    p.OutputDataReceived += P_OutputDataReceived;
-    return p;
-}
+Console.WriteLine($"Going back {Days} days");
 
-void P_OutputDataReceived(object sender, DataReceivedEventArgs e)
-{
-    text.Append(e.Data);
-}
+if (DryRun)
+    Console.WriteLine("\n**NOT ACTAULLY DELETING FILES**");
+Console.WriteLine();
 
 List<clsTorrent>? GetTorrents()
 {
@@ -94,16 +87,16 @@ List<Content>? GetContentOfTorrent(string hash)
     return JsonConvert.DeserializeObject<List<Content>>(json);
 }
 
-List<clsTorrent>? FindTorrentsToDelete(List<clsTorrent> torrents)
+List<clsTorrent> FindTorrentsToDelete(List<clsTorrent> torrents)
 {
     List<clsTorrent> result = new List<clsTorrent>();
     foreach (clsTorrent torrent in torrents)
     {
-        if ((DateTime.Now - DateTimeOffset.FromUnixTimeSeconds(torrent.added_on).DateTime).Days > days)
+        if ((DateTime.Now - DateTimeOffset.FromUnixTimeSeconds(torrent.added_on).DateTime).Days > Days)
         {
             //check contents
             List<Content>? content = GetContentOfTorrent(torrent.hash!);
-            if (rarFiles)
+            if (RarFiles)
             {
                 if (content!.Any(x => x.Name.EndsWith(".rar")))
                     result.Add(torrent);
@@ -115,16 +108,21 @@ List<clsTorrent>? FindTorrentsToDelete(List<clsTorrent> torrents)
     return result;
 }
 
-void DeleteTorrent(string hash)
+async void DeleteTorrents(List<clsTorrent> torrents, bool deleteFiles)
 {
-    Process p = GetProcess($"torrent delete {hash}{(!torrentsOnly ? " -f" : "")}");
-    p.Start();
-    p.BeginOutputReadLine();
-    p.WaitForExit();
+    //split into groups of 5 and then run the commands for each group "hash|hash|hash" &deleteFiles = false/true
+    List<IEnumerable<clsTorrent>> listOfTorrents = new List<IEnumerable<clsTorrent>>();
+    for (int i = 0; i < torrents.Count; i += 5) //split into lists of 5 each
+        listOfTorrents.Add(torrents.Skip(i).Take(5));
+    foreach (IEnumerable<clsTorrent> a in listOfTorrents)
+    {
+        List<string> names = new List<string>();
+        a.ToList().ForEach(x => names.Add($"{x.name} => {FormatBytes(x.size)}"));
 
-    string ret = text.ToString();
-    text.Clear();
-    Console.Write(ret);
+        Console.WriteLine($"Deleting:\n{String.Join("\n", names)}");
+        string hashes = String.Join("|", a.Select(x => x.hash!).ToList());
+        string res = await api.Post($"torrents/delete", new Dictionary<string, string>() { { "hashes", hashes }, { "deleteFiles", deleteFiles.ToString() } });
+    }
 }
 
 string FormatBytes(long bytes)
@@ -150,29 +148,32 @@ List<clsTorrent>? ListOfTorrents = GetTorrents();
 Console.WriteLine("Checking torrents to delete (could take a while)...");
 libmiroppb.Log("Checking torrents to delete (could take a while)...");
 
-List<clsTorrent>? TorrentsToDelete = FindTorrentsToDelete(ListOfTorrents!);
-
-if (!dry_run)
+List<clsTorrent> TorrentsToDelete = FindTorrentsToDelete(ListOfTorrents!);
+if (TorrentsToDelete.Any())
 {
-    Console.WriteLine($"Preparing to delete {TorrentsToDelete!.Count} torrents");
-    libmiroppb.Log($"Preparing to delete {TorrentsToDelete!.Count} torrents");
-    TorrentsToDelete.ForEach(x => sizeDeleted += x.size);
-
-    foreach (clsTorrent torrent in TorrentsToDelete!)
+    if (!DryRun)
     {
-        Console.WriteLine($"Deleting: {torrent.name}");
-        libmiroppb.Log($"Deleting: {torrent.name}");
+        Console.WriteLine($"Preparing to delete {TorrentsToDelete.Count} torrents");
+        libmiroppb.Log($"Preparing to delete {TorrentsToDelete.Count} torrents");
+        if (!OnlyTorrents) TorrentsToDelete.ForEach(x => sizeDeleted += x.size);
 
-        DeleteTorrent(torrent.hash!);
+        DeleteTorrents(TorrentsToDelete, !OnlyTorrents);
+
+        Console.WriteLine($"Deleted {TorrentsToDelete.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
+        libmiroppb.Log($"Deleted {TorrentsToDelete.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
     }
-
-    Console.WriteLine($"Deleted {TorrentsToDelete!.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
-    libmiroppb.Log($"Deleted {TorrentsToDelete!.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
+    else
+    {
+        if (!OnlyTorrents) TorrentsToDelete.ForEach(x => sizeDeleted += x.size);
+        Console.WriteLine($"Would have deleted {TorrentsToDelete.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
+        Console.Write("Show which ones? y/[n]");
+        string r = Console.ReadLine()!;
+        if (r.ToLower() == "y")
+            TorrentsToDelete.ForEach(x => Console.WriteLine($"{x.name} => {FormatBytes(x.size)}"));
+    }
 }
 else
-{
-    TorrentsToDelete!.ForEach(x => sizeDeleted += x.size);
-    Console.WriteLine($"Would have deleted {TorrentsToDelete!.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
-}
+    Console.WriteLine("There's no torrents to delete");
+
 
 

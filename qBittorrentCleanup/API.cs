@@ -51,9 +51,11 @@ namespace qBittorrentCleanup
             return responseString;
         }
 
-        public async Task<string> Post(string apiURL, Dictionary<string, string> values)
+        public async Task<string> Post(string apiURL, Dictionary<string, string>? values)
         {
-            var content = new FormUrlEncodedContent(values);
+            FormUrlEncodedContent? content = null;
+            if (values != null)
+                content = new FormUrlEncodedContent(values);
 
             //POST the object to the specified URI 
             var response = await client.PostAsync($"{_url}/api/v2/{apiURL}", content);

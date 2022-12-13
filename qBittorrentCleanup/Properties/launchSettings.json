@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "qBittorrentCleanup": {
+      "commandName": "Project",
+      "commandLineArgs": "--not-rar-only"
+    }
+  }
+}
