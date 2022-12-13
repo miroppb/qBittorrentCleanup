@@ -51,7 +51,7 @@ foreach (KeyValuePair<string, string> arg in _args)
         case "--help":
             Console.WriteLine("USAGE:\n\n  --not-dry-run: Go ahead and delete stuff\n          -days: How many days back to check (Default: 100)" +
                 "\n --not-only-rar: Delete all torrents that fit the day-limit (Default: Deletes torrents with *.rar files)" +
-                "\n--v: Delete only torrents, and not files (Default: false)\n         --help: This text :)\n");
+                "\n--only-torrents: Delete only torrents, and not files (Default: false)\n         --help: This text :)\n");
             Environment.Exit(0);
             break;
         default:
