@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace qBittorrentCleanup
+﻿namespace qBittorrentCleanup
 {
     // Root myDeserializedClass = JsonConvert.DeserializeObject<List<Root>>(myJsonResponse);
     public class clsTorrent
@@ -40,7 +34,7 @@ namespace qBittorrentCleanup
         public long uploaded { get; set; }
         public long downloaded_session { get; set; }
         public long uploaded_session { get; set; }
-        public int amount_left { get; set; }
+        public long amount_left { get; set; }
         public long completed { get; set; }
         public double ratio_limit { get; set; }
         public int seen_complete { get; set; }

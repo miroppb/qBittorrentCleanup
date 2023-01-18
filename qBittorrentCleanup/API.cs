@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Threading.Tasks;
+﻿using System.Net.Http.Headers;
 
 namespace qBittorrentCleanup
 {
@@ -40,7 +33,7 @@ namespace qBittorrentCleanup
             if (values != null)
                 content = new FormUrlEncodedContent(values);
 
-            HttpResponseMessage response = null;
+            HttpResponseMessage? response = null;
             if (content != null)
                 response = await client.GetAsync($"{_url}/api/v2/{apiURL}?" + content.ToString());
             else

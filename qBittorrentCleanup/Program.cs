@@ -1,14 +1,12 @@
 ﻿using miroppb;
 using Newtonsoft.Json;
 using qBittorrentCleanup;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Text;
 
-Dictionary<string, string> _args= new Dictionary<string, string>();
+Dictionary<string, string> _args = new Dictionary<string, string>();
 bool DryRun = true;
 int Days = 100;
-StringBuilder text= new StringBuilder();
+StringBuilder text = new StringBuilder();
 long sizeDeleted = 0;
 bool RarFiles = true;
 bool OnlyTorrents = false;
@@ -23,11 +21,11 @@ while (i < args.Length)
     }
     else if (args[i].StartsWith("-"))
     {
-        _args.Add(args[i], args[i+1]);
+        _args.Add(args[i], args[i + 1]);
         i = i + 2;
     }
 }
-    
+
 
 foreach (KeyValuePair<string, string> arg in _args)
 {
@@ -114,15 +112,25 @@ async void DeleteTorrents(List<clsTorrent> torrents, bool deleteFiles)
     List<IEnumerable<clsTorrent>> listOfTorrents = new List<IEnumerable<clsTorrent>>();
     for (int i = 0; i < torrents.Count; i += 5) //split into lists of 5 each
         listOfTorrents.Add(torrents.Skip(i).Take(5));
-    foreach (IEnumerable<clsTorrent> a in listOfTorrents)
+
+    List<Task<bool>> tasks = new List<Task<bool>>();
+    foreach (List<clsTorrent> a in listOfTorrents)
     {
         List<string> names = new List<string>();
         a.ToList().ForEach(x => names.Add($"{x.name} => {FormatBytes(x.size)}"));
 
         Console.WriteLine($"Deleting:\n{String.Join("\n", names)}");
         string hashes = String.Join("|", a.Select(x => x.hash!).ToList());
-        string res = await api.Post($"torrents/delete", new Dictionary<string, string>() { { "hashes", hashes }, { "deleteFiles", deleteFiles.ToString() } });
+        tasks.Add(LoadAsync($"torrents/delete", new Dictionary<string, string>() { { "hashes", hashes }, { "deleteFiles", deleteFiles.ToString() } }));
     }
+
+    await Task.WhenAll(tasks); //run tasks
+}
+
+async Task<bool> LoadAsync(string url, Dictionary<string, string> param)
+{
+    await api.Post(url, param);
+    return true;
 }
 
 string FormatBytes(long bytes)
@@ -166,7 +174,7 @@ if (TorrentsToDelete.Any())
     {
         if (!OnlyTorrents) TorrentsToDelete.ForEach(x => sizeDeleted += x.size);
         Console.WriteLine($"Would have deleted {TorrentsToDelete.Count} torrents, ammounting to {FormatBytes(sizeDeleted)}");
-        Console.Write("Show which ones? y/[n]");
+        Console.Write("Show which ones? y/[n]:");
         string r = Console.ReadLine()!;
         if (r.ToLower() == "y")
             TorrentsToDelete.ForEach(x => Console.WriteLine($"{x.name} => {FormatBytes(x.size)}"));
