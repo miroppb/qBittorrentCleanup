@@ -109,22 +109,19 @@ List<clsTorrent> FindTorrentsToDelete(List<clsTorrent> torrents)
 async void DeleteTorrents(List<clsTorrent> torrents, bool deleteFiles)
 {
     //split into groups of 5 and then run the commands for each group "hash|hash|hash" &deleteFiles = false/true
-    List<IEnumerable<clsTorrent>> listOfTorrents = new List<IEnumerable<clsTorrent>>();
-    for (int i = 0; i < torrents.Count; i += 5) //split into lists of 5 each
-        listOfTorrents.Add(torrents.Skip(i).Take(5));
+    //List<IEnumerable<clsTorrent>> listOfTorrents = new List<IEnumerable<clsTorrent>>();
+    //for (int i = 0; i < torrents.Count; i += 5) //split into lists of 5 each
+    //    listOfTorrents.Add(torrents.Skip(i).Take(5));
 
-    List<Task<bool>> tasks = new List<Task<bool>>();
-    foreach (List<clsTorrent> a in listOfTorrents)
-    {
-        List<string> names = new List<string>();
-        a.ToList().ForEach(x => names.Add($"{x.name} => {FormatBytes(x.size)}"));
+	List<string> names = new List<string>();
+	torrents.ForEach(x => names.Add($"{x.name} => {FormatBytes(x.size)}"));
 
-        Console.WriteLine($"Deleting:\n{String.Join("\n", names)}");
-        string hashes = String.Join("|", a.Select(x => x.hash!).ToList());
-        tasks.Add(LoadAsync($"torrents/delete", new Dictionary<string, string>() { { "hashes", hashes }, { "deleteFiles", deleteFiles.ToString() } }));
-    }
+	Console.WriteLine($"Deleting:\n{String.Join("\n", names)}");
 
-    await Task.WhenAll(tasks); //run tasks
+	string hashes = String.Join("|", torrents.Select(x => x.hash!).ToList());
+	await LoadAsync($"torrents/delete", new Dictionary<string, string>() { { "hashes", hashes }, { "deleteFiles", deleteFiles.ToString() } });
+
+    //await Task.Whenall()
 }
 
 async Task<bool> LoadAsync(string url, Dictionary<string, string> param)

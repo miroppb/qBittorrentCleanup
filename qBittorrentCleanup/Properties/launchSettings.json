@@ -2,7 +2,7 @@
   "profiles": {
     "qBittorrentCleanup": {
       "commandName": "Project",
-      "commandLineArgs": "--not-rar-only"
+      "commandLineArgs": "--not-dry-run"
     }
   }
 }
